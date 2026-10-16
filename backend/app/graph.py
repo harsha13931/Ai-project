@@ -179,6 +179,8 @@ def build_doc_graph() -> StateGraph:
 
 class CoachState(TypedDict, total=False):
     profile: dict
+    resume_text: str
+    num_questions: int
     quiz: dict
     quiz_public: dict
     answers: dict[str, int]
@@ -191,30 +193,33 @@ class CoachState(TypedDict, total=False):
 
 
 def _build_quiz(state: CoachState) -> dict:
-    """Generate quiz — LLM-enhanced if available, else rule-based."""
+    """Generate quiz dynamically from resume via LLM, fall back to static bank."""
     profile = state["profile"]
+    num_questions = state.get("num_questions", 10)
+    resume_text = state.get("resume_text", "")
     chain = quiz_generation_chain()
-    if chain is not None:
+    if chain is not None and resume_text:
         try:
-            topics_desc = {k: v["label"] for k, v in TOPICS.items()}
             raw = chain.invoke({
+                "resume_text": resume_text[:6000],
                 "profile": str(profile),
-                "topics": str(topics_desc),
+                "num_questions": str(num_questions),
             })
             questions = parse_llm_json(raw)
-            if isinstance(questions, list) and len(questions) >= 4:
+            if isinstance(questions, list) and len(questions) >= 2:
                 import uuid
                 for q in questions:
                     q["id"] = uuid.uuid4().hex[:8]
-                    q.setdefault("claimed", q.get("topic", "") in profile.get("detected_topics", []))
+                    q.setdefault("claimed", True)
                     q["_answer"] = q.pop("answer", 0)
                     q["_explain"] = q.pop("explain", "")
                 quiz = {"id": uuid.uuid4().hex[:12], "questions": questions, "profile": profile}
+                log.info("LLM generated %d dynamic questions from resume", len(questions))
                 return {"quiz": quiz, "quiz_public": assess_mod.public_view(quiz)}
         except Exception:
-            log.exception("LLM quiz generation failed, using rule-based")
+            log.exception("LLM quiz generation failed, using static fallback")
 
-    quiz = assess_mod.build_quiz(profile)
+    quiz = assess_mod.build_quiz(profile, num_questions)
     return {"quiz": quiz, "quiz_public": assess_mod.public_view(quiz)}
 
 

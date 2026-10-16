@@ -136,9 +136,18 @@
 
   $("start-quiz").addEventListener("click", async () => {
     const button = $("start-quiz");
+    const numQuestions = Number($("num-questions").value) || 10;
+    if (numQuestions < 3 || numQuestions > 50) {
+      $("assess-hint").textContent = "Choose between 3 and 50 questions.";
+      return;
+    }
     button.disabled = true;
+    $("assess-hint").textContent = "Generating questions from your resume…";
     try {
-      const quiz = await api("/api/quiz", { method: "POST" });
+      const quiz = await api("/api/quiz", {
+        method: "POST",
+        body: { num_questions: numQuestions },
+      });
       state.quizId = quiz.id;
       renderQuiz(quiz);
     } catch (err) {

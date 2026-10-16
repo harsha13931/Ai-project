@@ -59,14 +59,21 @@ RESUME_ANALYSIS_PROMPT = ChatPromptTemplate.from_messages([
 QUIZ_GENERATION_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        "You are an assessment designer for technical skills.\n"
-        "Given a candidate profile, generate targeted multiple-choice questions.\n\n"
+        "You are an expert technical assessment designer.\n"
+        "Given a candidate's resume text and profile, generate exactly "
+        "{num_questions} multiple-choice questions **dynamically from the "
+        "resume content**.\n\n"
         "Rules:\n"
-        "- For each *claimed* skill: generate 2 questions (intermediate to advanced).\n"
-        "- For each *unclaimed* skill from the allowed list: generate 1 basic question.\n"
+        "- Read the resume carefully and craft questions that test the "
+        "specific technologies, tools, projects, and concepts mentioned.\n"
+        "- Mix difficulty: ~40% intermediate, ~40% advanced, ~20% expert.\n"
+        "- Cover claimed skills deeply and probe a few related areas the "
+        "resume does NOT mention (mark those as unclaimed).\n"
         "- Each question has exactly 4 options, one correct.\n"
-        "- Return a JSON array of objects with keys:\n"
-        '  "topic" (topic key), "topic_label", "claimed" (bool),\n'
+        "- Questions must be specific and practical, not generic trivia.\n"
+        "- Return a JSON array of exactly {num_questions} objects with keys:\n"
+        '  "topic" (short snake_case key), "topic_label" (human name),\n'
+        '  "claimed" (bool — true if the resume mentions this skill),\n'
         '  "q" (question text), "options" [4 strings],\n'
         '  "answer" (0-based index of correct option),\n'
         '  "explain" (one-sentence explanation).\n\n'
@@ -74,8 +81,9 @@ QUIZ_GENERATION_PROMPT = ChatPromptTemplate.from_messages([
     ),
     (
         "human",
-        "Candidate profile:\n{profile}\n\n"
-        "Allowed topics: {topics}",
+        "Resume text:\n{resume_text}\n\n"
+        "Candidate profile summary:\n{profile}\n\n"
+        "Generate exactly {num_questions} questions.",
     ),
 ])
 

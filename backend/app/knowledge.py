@@ -1,7 +1,8 @@
 """Knowledge bank: skill topics, keyword detectors, and multiple-choice questions.
 
-Each topic has two questions. Topics found on a resume get both questions
-(to verify claimed skills); topics not found get one question (to probe gaps).
+Each topic has 5 questions so the user can choose how many to attempt.
+Topics found on a resume draw more questions (to verify claimed skills);
+topics not found draw fewer (to probe gaps).
 """
 
 TOPICS = {
@@ -22,6 +23,29 @@ TOPICS = {
                 "answer": 1,
                 "explain": "range(3) yields 0, 1, 2. The filter keeps 1 and 2, and doubling gives [2, 4].",
             },
+            {
+                "q": "What is the output of `type(lambda x: x)`?",
+                "options": ["<class 'lambda'>", "<class 'function'>", "<class 'method'>", "SyntaxError"],
+                "answer": 1,
+                "explain": "A lambda expression creates a function object. Python has no separate 'lambda' type.",
+            },
+            {
+                "q": "Which keyword creates a generator function in Python?",
+                "options": ["return", "yield", "generate", "async"],
+                "answer": 1,
+                "explain": "A function containing 'yield' becomes a generator function that returns an iterator.",
+            },
+            {
+                "q": "What does the `@staticmethod` decorator do?",
+                "options": [
+                    "Makes the method private",
+                    "Lets the method be called without an instance and receives no implicit first argument",
+                    "Makes the method run at import time",
+                    "Binds the method to the class instead of the instance",
+                ],
+                "answer": 1,
+                "explain": "A static method receives no 'self' or 'cls'. @classmethod receives the class as the first argument.",
+            },
         ],
     },
     "sql": {
@@ -40,6 +64,29 @@ TOPICS = {
                 "options": ["INNER JOIN", "LEFT JOIN", "CROSS JOIN", "SELF JOIN"],
                 "answer": 1,
                 "explain": "A LEFT JOIN keeps all left-table rows and fills unmatched right-side columns with NULL.",
+            },
+            {
+                "q": "What does a database index primarily improve?",
+                "options": ["Write speed", "Storage efficiency", "Read query speed", "Data integrity"],
+                "answer": 2,
+                "explain": "Indexes speed up reads by letting the engine locate rows without a full table scan, at the cost of slower writes.",
+            },
+            {
+                "q": "What does ACID stand for in databases?",
+                "options": [
+                    "Automated, Consistent, Isolated, Durable",
+                    "Atomicity, Consistency, Isolation, Durability",
+                    "Atomic, Cached, Indexed, Distributed",
+                    "Aggregated, Computed, Integrated, Deployed",
+                ],
+                "answer": 1,
+                "explain": "ACID guarantees that transactions are atomic, consistent, isolated and durable.",
+            },
+            {
+                "q": "Which SQL window function returns a sequential integer for each row within a partition?",
+                "options": ["RANK()", "DENSE_RANK()", "ROW_NUMBER()", "NTILE()"],
+                "answer": 2,
+                "explain": "ROW_NUMBER() assigns a unique sequential integer. RANK() can produce gaps on ties.",
             },
         ],
     },
@@ -64,6 +111,34 @@ TOPICS = {
                 ],
                 "answer": 1,
                 "explain": "A p-value is P(data at least this extreme | H0). It is not the probability that H0 is true.",
+            },
+            {
+                "q": "What is a Type I error?",
+                "options": [
+                    "Failing to reject a false null hypothesis",
+                    "Rejecting a true null hypothesis",
+                    "Choosing the wrong test",
+                    "Having too small a sample",
+                ],
+                "answer": 1,
+                "explain": "Type I error (false positive) means rejecting H0 when it is actually true. Type II is failing to reject a false H0.",
+            },
+            {
+                "q": "What does the standard deviation measure?",
+                "options": [
+                    "The centre of the data",
+                    "The spread of data around the mean",
+                    "The skewness of the distribution",
+                    "The number of outliers",
+                ],
+                "answer": 1,
+                "explain": "Standard deviation quantifies how much individual values deviate from the mean on average.",
+            },
+            {
+                "q": "In a normal distribution, approximately what percentage of data falls within 2 standard deviations of the mean?",
+                "options": ["68%", "90%", "95%", "99%"],
+                "answer": 2,
+                "explain": "The 68-95-99.7 rule: about 95% of data lies within 2 standard deviations in a normal distribution.",
             },
         ],
     },
@@ -94,6 +169,34 @@ TOPICS = {
                 "answer": 1,
                 "explain": "Keeping evaluation data separate from fitting and tuning gives an honest estimate of performance on unseen data.",
             },
+            {
+                "q": "What is the bias-variance tradeoff?",
+                "options": [
+                    "Choosing between speed and accuracy",
+                    "Balancing model complexity: too simple underfits (high bias), too complex overfits (high variance)",
+                    "Deciding between CPU and GPU training",
+                    "Trading training time for inference speed",
+                ],
+                "answer": 1,
+                "explain": "High bias = underfitting; high variance = overfitting. Good models balance both.",
+            },
+            {
+                "q": "Which metric is best for evaluating a classification model with heavily imbalanced classes?",
+                "options": ["Accuracy", "F1 score", "Mean squared error", "R-squared"],
+                "answer": 1,
+                "explain": "With imbalanced classes, accuracy is misleading. F1 balances precision and recall for the minority class.",
+            },
+            {
+                "q": "What technique helps prevent overfitting in a neural network?",
+                "options": [
+                    "Adding more layers",
+                    "Increasing the learning rate",
+                    "Dropout regularisation",
+                    "Removing the validation set",
+                ],
+                "answer": 2,
+                "explain": "Dropout randomly disables neurons during training, forcing the network to learn redundant representations.",
+            },
         ],
     },
     "javascript": {
@@ -122,6 +225,39 @@ TOPICS = {
                 ],
                 "answer": 1,
                 "explain": "fetch returns a promise. await or .then gives you the resolved value once it is ready.",
+            },
+            {
+                "q": "What is a closure in JavaScript?",
+                "options": [
+                    "A way to close browser windows",
+                    "A function that retains access to its outer scope even after the outer function has returned",
+                    "A method for closing database connections",
+                    "A design pattern for singleton objects",
+                ],
+                "answer": 1,
+                "explain": "A closure is a function bundled with its lexical environment, retaining access to outer variables.",
+            },
+            {
+                "q": "What does `Array.prototype.reduce` do?",
+                "options": [
+                    "Removes elements from an array",
+                    "Reduces the array to a single value by applying a function cumulatively",
+                    "Sorts the array in descending order",
+                    "Filters out falsy values",
+                ],
+                "answer": 1,
+                "explain": "reduce applies a function against an accumulator and each element, reducing the array to one value.",
+            },
+            {
+                "q": "What is the event loop in JavaScript?",
+                "options": [
+                    "A for-loop that runs events",
+                    "A mechanism that handles async callbacks by checking the call stack and task queue",
+                    "A DOM event listener",
+                    "A loop that polls the server for updates",
+                ],
+                "answer": 1,
+                "explain": "The event loop checks if the call stack is empty, then pushes the next callback from the task queue.",
             },
         ],
     },
@@ -152,6 +288,39 @@ TOPICS = {
                 "answer": 1,
                 "explain": "Under a partition you can keep responding (availability) or keep replicas identical (consistency), not both.",
             },
+            {
+                "q": "What is horizontal scaling?",
+                "options": [
+                    "Adding more CPU and RAM to one machine",
+                    "Adding more machines to share the load",
+                    "Optimising queries to run faster",
+                    "Compressing data to save space",
+                ],
+                "answer": 1,
+                "explain": "Horizontal scaling (scaling out) adds more machines. Vertical scaling (scaling up) adds resources to one machine.",
+            },
+            {
+                "q": "What problem does a message queue (like Kafka or RabbitMQ) solve?",
+                "options": [
+                    "It replaces the database",
+                    "It decouples producers and consumers, buffering work and handling spikes",
+                    "It encrypts messages in transit",
+                    "It serves static files faster",
+                ],
+                "answer": 1,
+                "explain": "Message queues decouple services, smooth traffic spikes, and allow async processing.",
+            },
+            {
+                "q": "What is database sharding?",
+                "options": [
+                    "Backing up the database to multiple locations",
+                    "Splitting data across multiple database instances based on a key",
+                    "Encrypting individual database columns",
+                    "Running read replicas for faster queries",
+                ],
+                "answer": 1,
+                "explain": "Sharding partitions data by a shard key so each instance holds a subset, allowing horizontal scale.",
+            },
         ],
     },
     "cloud_devops": {
@@ -181,6 +350,39 @@ TOPICS = {
                 "answer": 0,
                 "explain": "Continuous integration builds and tests every change. Continuous delivery/deployment ships it.",
             },
+            {
+                "q": "What is Infrastructure as Code (IaC)?",
+                "options": [
+                    "Writing application code that runs on servers",
+                    "Managing infrastructure through machine-readable definition files instead of manual setup",
+                    "Using only command-line interfaces",
+                    "Coding directly on production servers",
+                ],
+                "answer": 1,
+                "explain": "IaC (Terraform, CloudFormation) lets you version, review and reproduce infrastructure like application code.",
+            },
+            {
+                "q": "What is the difference between a container and a virtual machine?",
+                "options": [
+                    "Containers are larger and slower",
+                    "Containers share the host OS kernel and are lighter; VMs include a full guest OS",
+                    "Virtual machines are more portable",
+                    "There is no difference",
+                ],
+                "answer": 1,
+                "explain": "Containers share the host kernel (lighter, faster startup). VMs virtualise the full hardware stack.",
+            },
+            {
+                "q": "What does Kubernetes primarily do?",
+                "options": [
+                    "Builds container images",
+                    "Orchestrates, scales and manages containerised workloads",
+                    "Provides a code editor",
+                    "Replaces DNS servers",
+                ],
+                "answer": 1,
+                "explain": "Kubernetes automates deployment, scaling and operation of container clusters.",
+            },
         ],
     },
     "data_visualization": {
@@ -204,6 +406,34 @@ TOPICS = {
                 ],
                 "answer": 2,
                 "explain": "Clear hierarchy and one message per visual reduce cognitive load for the reader.",
+            },
+            {
+                "q": "When should you use a pie chart?",
+                "options": [
+                    "To show trends over time",
+                    "To compare parts of a whole when there are very few categories (2-3)",
+                    "To display correlation between two variables",
+                    "To show distributions of continuous data",
+                ],
+                "answer": 1,
+                "explain": "Pie charts work for part-to-whole with very few slices. Bar charts are better for more categories.",
+            },
+            {
+                "q": "What is the data-ink ratio principle?",
+                "options": [
+                    "Use as many colours as possible",
+                    "Maximise the share of ink used to show data, minimise non-data ink",
+                    "Always print charts in black ink only",
+                    "Make charts as small as possible",
+                ],
+                "answer": 1,
+                "explain": "Edward Tufte's principle: remove chart junk and let the data stand out clearly.",
+            },
+            {
+                "q": "Which chart type is best for showing the distribution of a single continuous variable?",
+                "options": ["Bar chart", "Histogram", "Pie chart", "Treemap"],
+                "answer": 1,
+                "explain": "A histogram bins continuous values to show the shape, centre and spread of a distribution.",
             },
         ],
     },

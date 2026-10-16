@@ -121,8 +121,13 @@
         <h2 id="assess-title">3. Resume skills assessment</h2>
         <p class="section-lede">Upload a resume and we test the skills it claims, plus a few areas it does not mention. Every question is multiple choice.</p>
         <div id="assess-intro">
+          <div class="quiz-options">
+            <label for="num-questions">Number of questions
+              <input id="num-questions" type="number" min="3" max="50" value="10">
+            </label>
+          </div>
           <button id="start-quiz" class="btn btn-primary" type="button">Start assessment</button>
-          <p id="assess-hint" class="muted small">Requires an uploaded resume.</p>
+          <p id="assess-hint" class="muted small">Requires an uploaded resume. Questions are generated dynamically from your resume content.</p>
         </div>
         <form id="quiz-form" hidden></form>
         <div id="results" class="results" aria-live="polite" hidden></div>

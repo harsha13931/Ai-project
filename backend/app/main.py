@@ -57,6 +57,11 @@ class SubmitRequest(BaseModel):
     answers: dict[str, int]
 
 
+class QuizRequest(BaseModel):
+    doc_id: str | None = None
+    num_questions: int = Field(default=10, ge=3, le=50)
+
+
 class RoadmapRequest(BaseModel):
     role: str
     weeks: int = Field(default=12, ge=4, le=26)
@@ -114,7 +119,10 @@ def ask(body: AskRequest):
 
 
 @app.post("/api/quiz", status_code=201)
-def create_quiz(doc_id: str | None = None):
+def create_quiz(body: QuizRequest | None = None):
+    doc_id = body.doc_id if body else None
+    num_questions = body.num_questions if body else 10
+
     idx = get_index()
     resumes = [d for d in idx.documents.values() if d["is_resume"]]
     if doc_id:
@@ -123,18 +131,24 @@ def create_quiz(doc_id: str | None = None):
             raise HTTPException(404, "Document not found.")
         if not doc["is_resume"]:
             raise HTTPException(400, "This document does not look like a resume.")
-        profile = doc["profile"]
     elif resumes:
-        profile = resumes[-1]["profile"]
+        doc = resumes[-1]
     else:
         raise HTTPException(400, "Upload a resume first so the assessment can be personalised.")
 
+    profile = doc["profile"]
+    resume_text = doc.get("text", "")
+
     try:
         from .graph import _build_quiz
-        result = _build_quiz({"profile": profile})
+        result = _build_quiz({
+            "profile": profile,
+            "resume_text": resume_text,
+            "num_questions": num_questions,
+        })
         quiz = result["quiz"]
     except ImportError:
-        quiz = assessment.build_quiz(profile)
+        quiz = assessment.build_quiz(profile, num_questions)
 
     quizzes[quiz["id"]] = quiz
     return assessment.public_view(quiz)

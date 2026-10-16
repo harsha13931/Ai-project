@@ -109,13 +109,13 @@ def test_docx_extraction():
     assert doc["pages"] == 1 and doc["chunks"] >= 1
 
 
-def test_quiz_asks_two_questions_for_claimed_skills():
+def test_quiz_gives_more_questions_for_claimed_skills():
     profile = {"detected_topics": ["python", "sql"]}
     quiz = assessment.build_quiz(profile)
     by_topic = {}
     for q in quiz["questions"]:
         by_topic.setdefault(q["topic"], []).append(q)
-    assert len(by_topic["python"]) == 2
+    assert len(by_topic["python"]) > 1
     assert len(by_topic["system_design"]) == 1
     assert all(q["claimed"] for q in by_topic["python"])
     assert not any(k.startswith("_") for q in assessment.public_view(quiz)["questions"] for k in q)
@@ -123,6 +123,7 @@ def test_quiz_asks_two_questions_for_claimed_skills():
 
 def test_scoring_flags_claimed_but_unverified():
     quiz = assessment.build_quiz({"detected_topics": ["python"]})
+    python_count = sum(1 for q in quiz["questions"] if q["topic"] == "python")
     answers = {}
     for q in quiz["questions"]:
         answers[q["id"]] = q["_answer"] if q["topic"] != "python" else (q["_answer"] + 1) % len(q["options"])
@@ -132,7 +133,8 @@ def test_scoring_flags_claimed_but_unverified():
     assert python["flag"] == "claimed but unverified"
     assert python["guidance"]
     assert "python" in result["gaps"]
-    assert result["percent"] == round(100 * (len(quiz["questions"]) - 2) / len(quiz["questions"]))
+    expected = round(100 * (len(quiz["questions"]) - python_count) / len(quiz["questions"]))
+    assert result["percent"] == expected
 
 
 def test_perfect_score_is_strong():
@@ -168,7 +170,7 @@ def test_end_to_end_api_flow():
     assert upload.status_code == 201
     assert upload.json()["is_resume"] is True
 
-    quiz = client.post("/api/quiz").json()
+    quiz = client.post("/api/quiz", json={"num_questions": 5}).json()
     assert quiz["total"] == len(quiz["questions"])
     answers = {q["id"]: 0 for q in quiz["questions"]}
     result = client.post(f"/api/quiz/{quiz['id']}/submit", json={"answers": answers}).json()
@@ -183,7 +185,13 @@ def test_end_to_end_api_flow():
 
 def test_quiz_requires_resume():
     client = TestClient(app)
-    assert client.post("/api/quiz").status_code == 400
+    assert client.post("/api/quiz", json={}).status_code == 400
+
+
+def test_quiz_num_questions_limits_output():
+    profile = {"detected_topics": ["python", "sql", "statistics"]}
+    quiz = assessment.build_quiz(profile, num_questions=5)
+    assert len(quiz["questions"]) == 5
 
 
 def test_upload_rejects_unsupported_type():

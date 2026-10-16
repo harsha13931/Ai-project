@@ -201,6 +201,12 @@ a:hover { color: var(--brand-strong); }
 
 /* Quiz */
 #assess-intro { display: grid; gap: 0.6rem; justify-items: start; margin-bottom: 1.5rem; }
+.quiz-options { display: flex; gap: 1rem; align-items: end; }
+.quiz-options label { display: grid; gap: 0.3rem; font-weight: 600; font-size: 0.95rem; }
+.quiz-options input {
+  font: inherit; width: 110px; padding: 0.6rem 0.75rem; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
 .question {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 1.25rem 1.25rem 1rem; margin-bottom: 1rem; box-shadow: var(--shadow); border-width: 1px;

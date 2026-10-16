@@ -11,8 +11,8 @@ LEVELS = [
 ]
 
 
-def build_quiz(profile: dict | None) -> dict:
-    """Two questions for each topic the resume claims, one probe question for the rest."""
+def build_quiz(profile: dict | None, num_questions: int = 0) -> dict:
+    """Static fallback: pick from the knowledge bank when no LLM is available."""
     detected = set(profile["detected_topics"]) if profile else set()
     questions = []
     for topic, meta in TOPICS.items():
@@ -31,6 +31,8 @@ def build_quiz(profile: dict | None) -> dict:
                 "_explain": item["explain"],
             })
     random.shuffle(questions)
+    if num_questions > 0:
+        questions = questions[:num_questions]
     return {"id": uuid.uuid4().hex[:12], "questions": questions, "profile": profile}
 
 
@@ -72,11 +74,13 @@ def score_quiz(quiz: dict, answers: dict[str, int]) -> dict:
     topics = []
     for topic_key, stats in per_topic.items():
         pct = round(100 * stats["correct"] / stats["total"])
+        static_topic = TOPICS.get(topic_key)
         topics.append({
             **stats,
             "percent": pct,
             "gap": pct < 100,
-            "guidance": TOPICS[topic_key]["guidance"] if pct < 100 else None,
+            "guidance": static_topic["guidance"] if static_topic and pct < 100 else
+                        f"Review {stats['label']} fundamentals." if pct < 100 else None,
             "flag": "claimed but unverified" if stats["claimed"] and pct < 100 else None,
         })
     topics.sort(key=lambda t: t["percent"])
