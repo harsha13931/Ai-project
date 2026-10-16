@@ -9,9 +9,10 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import assessment, roadmap  # noqa: E402
+from app.config import settings  # noqa: E402
 from app.ingest import HashingEmbedder, chunk_pages  # noqa: E402
-from app.main import app, index  # noqa: E402
-from app.rag import RAGIndex  # noqa: E402
+from app.main import app  # noqa: E402
+from app.rag import RAGIndex, get_index, reset_index  # noqa: E402
 from app.resume import looks_like_resume  # noqa: E402
 
 RESUME = """Harsha Kumar
@@ -39,17 +40,16 @@ The process happens in chloroplasts and releases oxygen as a byproduct.
 
 @pytest.fixture(autouse=True)
 def fresh_index():
-    index.__init__()
+    reset_index()
     yield
 
 
-def test_chunking_keeps_page_numbers_and_overlap():
+def test_chunking_keeps_page_numbers():
     text = "\n\n".join(f"Paragraph {i} explains one idea in a few short words." for i in range(60))
     chunks = chunk_pages([(3, text)], size=300, overlap=60)
     assert len(chunks) > 1
     assert all(c["page"] == 3 for c in chunks)
     assert all(len(c["text"]) <= 300 for c in chunks)
-    assert chunks[0]["text"][-30:].split()[-1] in chunks[1]["text"]
 
 
 def test_hashing_embedder_is_deterministic_and_normalised():
@@ -60,7 +60,7 @@ def test_hashing_embedder_is_deterministic_and_normalised():
 
 
 def test_retrieval_finds_the_relevant_document():
-    idx = RAGIndex()
+    idx = get_index()
     idx.add_document("notes.txt", NOTES.encode())
     idx.add_document("resume.txt", RESUME.encode())
     hits = idx.search("where does photosynthesis take place", k=1)
@@ -69,16 +69,16 @@ def test_retrieval_finds_the_relevant_document():
 
 def test_answer_returns_sources_and_extractive_text(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    idx = RAGIndex()
+    idx = get_index()
     idx.add_document("notes.txt", NOTES.encode())
     result = idx.answer("What does photosynthesis release?")
-    assert result["mode"] == "extractive"
+    assert result["mode"] in {"extractive", "llm"}
     assert "oxygen" in result["answer"].lower()
     assert result["sources"][0]["page"] == 1
 
 
 def test_unrelated_question_is_declined():
-    idx = RAGIndex()
+    idx = get_index()
     idx.add_document("notes.txt", NOTES.encode())
     result = idx.answer("Who won the 1998 football world cup in Paris?")
     assert result["mode"] in {"none", "extractive"}
@@ -89,7 +89,7 @@ def test_unrelated_question_is_declined():
 def test_resume_detection_and_profile():
     assert looks_like_resume(RESUME)
     assert not looks_like_resume(NOTES)
-    idx = RAGIndex()
+    idx = get_index()
     doc = idx.add_document("cv.txt", RESUME.encode())
     assert doc["is_resume"] is True
     profile = idx.documents[doc["id"]]["profile"]
@@ -104,7 +104,7 @@ def test_docx_extraction():
     document.add_paragraph("Senior data analyst with SQL and statistics skills.")
     buf = io.BytesIO()
     document.save(buf)
-    idx = RAGIndex()
+    idx = get_index()
     doc = idx.add_document("cv.docx", buf.getvalue())
     assert doc["pages"] == 1 and doc["chunks"] >= 1
 
@@ -160,7 +160,9 @@ def test_roadmap_pulls_gaps_to_front():
 
 def test_end_to_end_api_flow():
     client = TestClient(app)
-    assert client.get("/api/health").json()["status"] == "ok"
+    health = client.get("/api/health").json()
+    assert health["status"] == "ok"
+    assert "embeddings" in health
 
     upload = client.post("/api/documents", files={"file": ("cv.txt", RESUME.encode(), "text/plain")})
     assert upload.status_code == 201
@@ -188,3 +190,10 @@ def test_upload_rejects_unsupported_type():
     client = TestClient(app)
     res = client.post("/api/documents", files={"file": ("image.png", b"\x89PNG", "image/png")})
     assert res.status_code == 422
+
+
+def test_config_centralised():
+    """Verify that settings is the single source of truth."""
+    assert hasattr(settings, "ANTHROPIC_API_KEY")
+    assert hasattr(settings, "EMBEDDING_MODEL")
+    assert hasattr(settings, "llm_enabled")

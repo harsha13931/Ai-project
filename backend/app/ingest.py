@@ -1,22 +1,29 @@
-"""Stage 1-3 of the pipeline: extract text, chunk it, and embed it.
+"""Stage 1-3: extract text, chunk with LangChain, embed with HuggingFace.
 
 Extraction keeps page numbers so answers can cite their source page.
-Chunking is paragraph-aware with overlap so context is not cut mid-thought.
+Chunking uses LangChain's RecursiveCharacterTextSplitter for paragraph-aware
+splitting.  Embeddings use a free, local HuggingFace model (no API key).
 """
+from __future__ import annotations
+
 import io
+import logging
 import re
 
 import docx
 import numpy as np
 from pypdf import PdfReader
 
-SUPPORTED = {".pdf", ".docx", ".txt", ".md"}
-CHUNK_SIZE = 900
-CHUNK_OVERLAP = 150
+from .config import settings
 
+log = logging.getLogger(__name__)
+
+SUPPORTED = {".pdf", ".docx", ".txt", ".md"}
+
+
+# ── Text extraction (unchanged — framework-agnostic) ──────────────────
 
 def extract_pages(filename: str, data: bytes) -> list[tuple[int, str]]:
-    """Return a list of (page_number, text) for the uploaded file."""
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in SUPPORTED:
         raise ValueError(f"Unsupported file type '{ext or 'none'}'. Use PDF, DOCX, TXT or MD.")
@@ -39,8 +46,64 @@ def extract_pages(filename: str, data: bytes) -> list[tuple[int, str]]:
     return [(1, data.decode("utf-8", errors="replace"))]
 
 
+# ── Chunking with LangChain ───────────────────────────────────────────
+
+def chunk_pages(
+    pages: list[tuple[int, str]],
+    size: int | None = None,
+    overlap: int | None = None,
+) -> list[dict]:
+    size = size or settings.CHUNK_SIZE
+    overlap = overlap or settings.CHUNK_OVERLAP
+
+    try:
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=size,
+            chunk_overlap=overlap,
+            separators=["\n\n", "\n", ". ", " ", ""],
+            length_function=len,
+        )
+        chunks: list[dict] = []
+        for page_no, text in pages:
+            for chunk_text in splitter.split_text(text):
+                chunk_text = chunk_text.strip()
+                if chunk_text:
+                    chunks.append({"page": page_no, "text": chunk_text})
+        return chunks
+    except ImportError:
+        log.warning("langchain-text-splitters not installed, using built-in chunker")
+        return _fallback_chunk_pages(pages, size, overlap)
+
+
+def _fallback_chunk_pages(
+    pages: list[tuple[int, str]], size: int, overlap: int,
+) -> list[dict]:
+    """Built-in chunker kept as fallback."""
+    chunks: list[dict] = []
+    for page_no, text in pages:
+        paragraphs: list[str] = []
+        for raw in re.split(r"\n\s*\n|\n", text):
+            raw = raw.strip()
+            if raw:
+                paragraphs.extend(_split_long(raw, size) if len(raw) > size else [raw])
+        buffer = ""
+        for para in paragraphs:
+            if buffer and len(buffer) + len(para) + 1 > size:
+                chunks.append({"page": page_no, "text": buffer})
+                room = size - len(para) - 1
+                tail = buffer[-min(overlap, room):] if room > 0 else ""
+                tail = tail.split(" ", 1)[-1] if " " in tail else ""
+                buffer = f"{tail} {para}".strip()
+            else:
+                buffer = f"{buffer}\n{para}".strip() if buffer else para
+        if buffer:
+            chunks.append({"page": page_no, "text": buffer})
+    return chunks
+
+
 def _split_long(paragraph: str, size: int) -> list[str]:
-    """Hard-split a paragraph that is longer than one chunk, on word boundaries."""
     pieces, current = [], ""
     for word in paragraph.split():
         if len(current) + len(word) + 1 > size and current:
@@ -53,37 +116,33 @@ def _split_long(paragraph: str, size: int) -> list[str]:
     return pieces
 
 
-def chunk_pages(pages: list[tuple[int, str]], size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[dict]:
-    chunks: list[dict] = []
-    for page_no, text in pages:
-        paragraphs = []
-        for raw in re.split(r"\n\s*\n|\n", text):
-            raw = raw.strip()
-            if raw:
-                paragraphs.extend(_split_long(raw, size) if len(raw) > size else [raw])
+# ── Embeddings: HuggingFace (primary) → hashing (fallback) ────────────
 
-        buffer = ""
-        for para in paragraphs:
-            if buffer and len(buffer) + len(para) + 1 > size:
-                chunks.append({"page": page_no, "text": buffer})
-                room = size - len(para) - 1  # the carried tail must leave room for the new paragraph
-                tail = buffer[-min(overlap, room):] if room > 0 else ""
-                tail = tail.split(" ", 1)[-1] if " " in tail else ""  # start the tail on a whole word
-                buffer = f"{tail} {para}".strip()
-            else:
-                buffer = f"{buffer}\n{para}".strip() if buffer else para
-        if buffer:
-            chunks.append({"page": page_no, "text": buffer})
-    return chunks
+_hf_embedder = None
+
+
+def get_hf_embeddings():
+    """Return a LangChain HuggingFaceEmbeddings instance (singleton)."""
+    global _hf_embedder
+    if _hf_embedder is not None:
+        return _hf_embedder
+    try:
+        from langchain_huggingface import HuggingFaceEmbeddings
+
+        _hf_embedder = HuggingFaceEmbeddings(
+            model_name=settings.EMBEDDING_MODEL,
+            model_kwargs={"device": settings.EMBEDDING_DEVICE},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+        log.info("Using HuggingFace embeddings: %s", settings.EMBEDDING_MODEL)
+        return _hf_embedder
+    except Exception:
+        log.warning("HuggingFace embeddings unavailable, using hashing fallback")
+        return None
 
 
 class HashingEmbedder:
-    """Offline embedder: hashed unigrams and bigrams with log-scaled counts.
-
-    Zero API cost and deterministic, so the app runs out of the box. Swap in a
-    neural model (sentence-transformers, OpenAI, Voyage) behind the same
-    `embed(texts) -> np.ndarray` interface for better semantic recall.
-    """
+    """Offline embedder kept as zero-dependency fallback."""
 
     name = "hashing-v1"
     dim = 512
@@ -112,7 +171,6 @@ class HashingEmbedder:
 
 
 def _stable_hash(text: str) -> int:
-    """FNV-1a so the hash is the same across processes (Python's hash() is salted)."""
     h = 2166136261
     for byte in text.encode("utf-8"):
         h = ((h ^ byte) * 16777619) & 0xFFFFFFFF

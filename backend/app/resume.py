@@ -1,4 +1,8 @@
-"""Resume detection and profile extraction, used to personalise the assessment."""
+"""Resume detection and profile extraction.
+
+Rule-based extraction runs always (no API key needed).  When the LLM is
+configured, ``graph.py`` enriches the profile with deeper analysis.
+"""
 import re
 
 from .knowledge import TOPICS
