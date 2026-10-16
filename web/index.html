@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DocMind — Ask Your Documents & Plan Your Career</title>
+  <meta name="description" content="Upload any PDF, Word or text document to ask questions with cited answers. Upload a resume to take a personalised skills assessment and get a week-by-week learning roadmap.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://example.com/">
+  <meta name="theme-color" content="#4f46e5">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="DocMind — Ask Your Documents & Plan Your Career">
+  <meta property="og:description" content="Cited answers from your documents, a resume skills assessment, and a role-based learning roadmap.">
+  <meta property="og:url" content="https://example.com/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M9 10h14M9 16h10M9 22h7' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "DocMind",
+    "applicationCategory": "EducationalApplication",
+    "operatingSystem": "Any",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "description": "Document question answering with citations, resume skills assessment and role-based learning roadmaps."
+  }
+  </script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container nav">
+      <a class="brand" href="#top" aria-label="DocMind home">
+        <span class="brand-mark" aria-hidden="true"></span> DocMind
+      </a>
+      <nav aria-label="Primary">
+        <a href="#ask">Ask</a>
+        <a href="#assess">Assessment</a>
+        <a href="#roadmap">Roadmap</a>
+        <a href="#how">How it works</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="container">
+        <p class="eyebrow">Retrieval-augmented answers &middot; Career coaching</p>
+        <h1>Ask any document. Know exactly where you stand.</h1>
+        <p class="lead">Upload a PDF, Word file or text document and get answers with page-level citations. Upload your resume and get a scored skills check, targeted guidance, and a week-by-week plan for the role you want.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#upload">Upload a document</a>
+          <a class="btn btn-ghost" href="#how">See how it works</a>
+        </div>
+        <ul class="trust" aria-label="Highlights">
+          <li>Cited answers with page numbers</li>
+          <li>Multiple-choice, scored assessment</li>
+          <li>Timetables built around your weekly hours</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="how" aria-labelledby="how-title">
+      <div class="container">
+        <h2 id="how-title">How the pipeline works</h2>
+        <p class="section-lede">Six stages turn a raw file into grounded answers. The same extracted text also powers the resume assessment.</p>
+        <ol class="steps">
+          <li><span class="step-n">1</span><h3>Extract</h3><p>Pull text from PDF, DOCX, TXT and MD while keeping page numbers.</p></li>
+          <li><span class="step-n">2</span><h3>Chunk</h3><p>Split on paragraphs with overlap so ideas are not cut mid-sentence.</p></li>
+          <li><span class="step-n">3</span><h3>Embed</h3><p>Convert each chunk to a vector. Works offline; swap in a neural model for higher recall.</p></li>
+          <li><span class="step-n">4</span><h3>Retrieve</h3><p>Rank chunks by cosine similarity to the question and keep the top matches.</p></li>
+          <li><span class="step-n">5</span><h3>Answer</h3><p>Generate an answer from retrieved context only, with citations. Refuses when the answer is absent.</p></li>
+          <li><span class="step-n">6</span><h3>Coach</h3><p>Detect resume skills, test them with MCQs, score, and map a learning route.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section alt" id="upload" aria-labelledby="upload-title">
+      <div class="container split">
+        <div>
+          <h2 id="upload-title">1. Upload your document</h2>
+          <p class="section-lede">Files stay in this session's memory. Nothing is used for training.</p>
+          <form id="upload-form" class="dropzone" aria-describedby="upload-help">
+            <label for="file-input" class="dropzone-label">
+              <span class="dropzone-title">Choose a file or drop it here</span>
+              <span id="upload-help" class="muted">PDF, DOCX, TXT or MD · up to 10 MB</span>
+            </label>
+            <input id="file-input" name="file" type="file" accept=".pdf,.docx,.txt,.md" required>
+            <button class="btn btn-primary" type="submit">Process document</button>
+          </form>
+          <p id="upload-status" class="status" role="status" aria-live="polite"></p>
+        </div>
+        <div>
+          <h3>Loaded documents</h3>
+          <ul id="doc-list" class="doc-list"><li class="muted">None yet.</li></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="ask" aria-labelledby="ask-title">
+      <div class="container narrow">
+        <h2 id="ask-title">2. Ask a question</h2>
+        <p class="section-lede">Answers are grounded in your documents, with sources shown underneath.</p>
+        <form id="ask-form" class="ask-form">
+          <label for="question" class="sr-only">Your question</label>
+          <input id="question" name="question" type="text" minlength="3" maxlength="500" placeholder="e.g. What were the main findings in section 3?" required>
+          <button class="btn btn-primary" type="submit">Ask</button>
+        </form>
+        <article id="answer" class="answer" aria-live="polite" hidden>
+          <p id="answer-text"></p>
+          <p id="answer-mode" class="muted small"></p>
+          <ul id="sources" class="sources"></ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section alt" id="assess" aria-labelledby="assess-title">
+      <div class="container narrow">
+        <h2 id="assess-title">3. Resume skills assessment</h2>
+        <p class="section-lede">Upload a resume and we test the skills it claims, plus a few areas it does not mention. Every question is multiple choice.</p>
+        <div id="assess-intro">
+          <button id="start-quiz" class="btn btn-primary" type="button">Start assessment</button>
+          <p id="assess-hint" class="muted small">Requires an uploaded resume.</p>
+        </div>
+        <form id="quiz-form" hidden></form>
+        <div id="results" class="results" aria-live="polite" hidden></div>
+      </div>
+    </section>
+
+    <section class="section" id="roadmap" aria-labelledby="roadmap-title">
+      <div class="container">
+        <h2 id="roadmap-title">4. Which role do you want to target?</h2>
+        <p class="section-lede">Pick a role and your time budget. If you finished the assessment, the plan starts with your gaps.</p>
+        <fieldset class="role-grid" id="role-grid">
+          <legend class="sr-only">Target role</legend>
+        </fieldset>
+        <div class="roadmap-controls">
+          <label>Weeks
+            <input id="weeks" type="number" min="4" max="26" value="12">
+          </label>
+          <label>Hours per week
+            <input id="hours" type="number" min="2" max="40" value="10">
+          </label>
+          <button id="build-roadmap" class="btn btn-primary" type="button">Build my roadmap</button>
+        </div>
+        <p id="roadmap-status" class="status" role="status" aria-live="polite"></p>
+        <div id="roadmap-out" hidden>
+          <h3 id="roadmap-heading"></h3>
+          <div id="phases" class="phases"></div>
+          <div class="table-wrap">
+            <table class="timetable">
+              <caption>Week-by-week timetable</caption>
+              <thead><tr><th scope="col">Week</th><th scope="col">Phase</th><th scope="col">Focus</th><th scope="col">Hours</th><th scope="col">Milestone</th></tr></thead>
+              <tbody id="timetable-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt" id="faq" aria-labelledby="faq-title">
+      <div class="container narrow">
+        <h2 id="faq-title">Frequently asked questions</h2>
+        <details><summary>Are my documents used to train models?</summary><p>No. Text is processed in memory for retrieval and scoring. Nothing is sent to a third party unless you configure an LLM key yourself.</p></details>
+        <details><summary>Do answers work without an AI key?</summary><p>Yes. Without a key, answers are the most relevant sentences from your document with page citations. With an Anthropic key set, answers are written by the model from the same retrieved context.</p></details>
+        <details><summary>Why are questions multiple choice?</summary><p>Multiple-choice items can be scored consistently and explained immediately, which makes the guidance specific.</p></details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; DocMind. Built with FastAPI, numpy and plain HTML.</p>
+    </div>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
