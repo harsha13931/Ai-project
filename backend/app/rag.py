@@ -3,6 +3,8 @@
 When HuggingFace + FAISS are installed the index uses real semantic
 embeddings.  Otherwise it falls back to the hashing embedder with
 NumPy cosine similarity — still functional, just less accurate.
+
+Hybrid retrieval: dense (semantic) + BM25 (lexical), fused via RRF.
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ import numpy as np
 
 from .config import settings
 from .ingest import HashingEmbedder, chunk_pages, extract_pages, get_hf_embeddings
+from .retrieval import BM25, reciprocal_rank_fusion
 from .resume import build_profile, looks_like_resume
 
 log = logging.getLogger(__name__)
@@ -57,6 +60,7 @@ class RAGIndex:
         self._hf = get_hf_embeddings()
         self._faiss_store = None
         self._use_faiss = False
+        self._bm25 = BM25()
 
         if self._hf is not None:
             try:
@@ -92,6 +96,8 @@ class RAGIndex:
 
         doc_id = uuid.uuid4().hex[:12]
         full_text = "\n".join(text for _, text in pages)
+
+        self._bm25.add_documents(doc_id, [c["text"] for c in chunks])
 
         if self._use_faiss:
             self._add_to_faiss(chunks, doc_id, filename)
@@ -136,8 +142,51 @@ class RAGIndex:
 
     def search(self, query: str, k: int = 4, doc_id: str | None = None) -> list[dict]:
         if self._use_faiss and self._faiss_store is not None:
-            return self._faiss_search(query, k, doc_id)
-        return self._fallback_search(query, k, doc_id)
+            dense_hits = self._faiss_search(query, k * 2, doc_id)
+        else:
+            dense_hits = self._fallback_search(query, k * 2, doc_id)
+
+        bm25_ranked = self._bm25.search(query, k=k * 2, doc_id=doc_id)
+        if not bm25_ranked:
+            return dense_hits[:k]
+
+        bm25_texts = self._bm25.get_texts()
+        bm25_doc_ids = self._bm25._doc_ids
+
+        all_hits: dict[str, dict] = {}
+        dense_order: list[tuple[str, float]] = []
+        for h in dense_hits:
+            key = h["text"][:120]
+            all_hits[key] = h
+            dense_order.append((key, h["score"]))
+
+        bm25_order: list[tuple[str, float]] = []
+        for corpus_idx, bm25_score in bm25_ranked:
+            text = " ".join(bm25_texts[corpus_idx])
+            key = text[:120]
+            bm25_order.append((key, bm25_score))
+            if key not in all_hits:
+                all_hits[key] = {
+                    "text": text,
+                    "page": 0,
+                    "doc_id": bm25_doc_ids[corpus_idx],
+                    "doc_name": "",
+                    "score": 0.0,
+                }
+
+        keys = list(all_hits.keys())
+        key_to_idx = {k: i for i, k in enumerate(keys)}
+
+        dense_ranked = [(key_to_idx[k], s) for k, s in dense_order if k in key_to_idx]
+        bm25_ranked_mapped = [(key_to_idx[k], s) for k, s in bm25_order if k in key_to_idx]
+
+        fused = reciprocal_rank_fusion(dense_ranked, bm25_ranked_mapped)
+        results = []
+        for idx, rrf_score in fused[:k]:
+            hit = dict(all_hits[keys[idx]])
+            hit["score"] = round(rrf_score, 4)
+            results.append(hit)
+        return results
 
     def _faiss_search(self, query: str, k: int, doc_id: str | None) -> list[dict]:
         fetch_k = k * 4 if doc_id else k
@@ -173,7 +222,11 @@ class RAGIndex:
         return results
 
     def answer(self, question: str, doc_id: str | None = None) -> dict:
-        hits = [h for h in self.search(question, k=settings.RETRIEVAL_K, doc_id=doc_id) if h["score"] > settings.SCORE_THRESHOLD]
+        raw_hits = self.search(question, k=settings.RETRIEVAL_K, doc_id=doc_id)
+        threshold = settings.SCORE_THRESHOLD
+        if raw_hits and raw_hits[0]["score"] < 0.1:
+            threshold = min(threshold, 0.005)
+        hits = [h for h in raw_hits if h["score"] > threshold]
         if not hits:
             return {"answer": "I could not find that in the uploaded documents.", "mode": "none", "sources": []}
 

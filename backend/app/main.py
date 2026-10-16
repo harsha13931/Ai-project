@@ -1,27 +1,31 @@
 """FastAPI service with LangChain + LangGraph powered pipelines.
 
-All configuration (API keys, model names) comes from ``config.settings``
-— set your keys in environment variables or a .env file, ONE place.
+Production-grade: SQLite persistence, hybrid retrieval, security
+middleware, structured lifecycle.  All configuration comes from
+``config.settings`` — set keys in environment variables or a .env file.
 """
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import assessment, roadmap
+from . import assessment, roadmap, storage
 from .config import settings
 from .rag import get_index, reset_index
+from .security import add_security
+
+log = logging.getLogger(__name__)
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
-app = FastAPI(title="DocMind — RAG & Career Coach", version="2.0.0")
-quizzes: dict[str, dict] = {}
+# ── LangGraph lazy init ──────────────────────────────────────────────
 
-# Lazy-import the LangGraph workflows so the app starts even if
-# langgraph is not installed.
 _doc_graph = None
 _rag_graph = None
 
@@ -48,6 +52,65 @@ def _get_rag_graph():
     return _rag_graph
 
 
+# ── Lifecycle ────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    storage.get_db()
+    _restore_documents()
+    purged = storage.purge_expired()
+    if purged:
+        log.info("Purged %d expired documents", purged)
+    log.info(
+        "DocMind ready — LLM %s, embeddings=%s, docs=%d",
+        "enabled" if settings.llm_enabled else "disabled",
+        settings.EMBEDDING_MODEL,
+        len(get_index().documents),
+    )
+    yield
+    storage.close_db()
+
+
+def _restore_documents():
+    """Reload persisted documents into the in-memory RAG index on startup."""
+    idx = get_index()
+    rows = storage.load_documents()
+    restored = 0
+    for row in rows:
+        if row["id"] in idx.documents:
+            continue
+        idx.documents[row["id"]] = {
+            "id": row["id"],
+            "name": row["name"],
+            "pages": row["pages"],
+            "chunks": row["chunks"],
+            "is_resume": row["is_resume"],
+            "profile": row.get("profile"),
+            "text": row.get("text", ""),
+        }
+        restored += 1
+    if restored:
+        log.info("Restored %d documents from database", restored)
+
+
+# ── App ──────────────────────────────────────────────────────────────
+
+app = FastAPI(
+    title="DocMind — RAG & Career Coach",
+    version="3.0.0",
+    lifespan=lifespan,
+)
+
+add_security(app)
+
+# ── Request models ───────────────────────────────────────────────────
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=500)
     doc_id: str | None = None
@@ -69,26 +132,40 @@ class RoadmapRequest(BaseModel):
     quiz_id: str | None = None
 
 
+# ── Document endpoints ───────────────────────────────────────────────
+
 @app.post("/api/documents", status_code=201)
 async def upload_document(file: UploadFile = File(...)):
     data = await file.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "File is larger than 10 MB.")
+    if len(data) > settings.MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            413,
+            f"File is larger than {settings.MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+        )
 
     graph = _get_doc_graph()
     if graph is not None:
         try:
             result = graph.invoke({"filename": file.filename or "upload.txt", "data": data})
-            return result["doc_info"]
+            doc_info = result["doc_info"]
         except ValueError as exc:
             raise HTTPException(422, str(exc))
         except Exception:
-            pass  # fall through to direct path
+            log.exception("Doc graph failed, falling back to direct ingest")
+            doc_info = None
 
-    try:
-        return get_index().add_document(file.filename or "upload.txt", data)
-    except ValueError as exc:
-        raise HTTPException(422, str(exc))
+    if graph is None or doc_info is None:
+        try:
+            doc_info = get_index().add_document(file.filename or "upload.txt", data)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+
+    idx = get_index()
+    doc = idx.documents.get(doc_info["id"])
+    if doc:
+        storage.save_document(doc)
+
+    return doc_info
 
 
 @app.get("/api/documents")
@@ -96,6 +173,18 @@ def list_documents():
     idx = get_index()
     return [idx.public_doc(doc_id) for doc_id in idx.documents]
 
+
+@app.delete("/api/documents/{doc_id}")
+def delete_document(doc_id: str):
+    idx = get_index()
+    if doc_id not in idx.documents:
+        raise HTTPException(404, "Document not found.")
+    del idx.documents[doc_id]
+    storage.delete_document(doc_id)
+    return {"deleted": True}
+
+
+# ── Ask endpoint ─────────────────────────────────────────────────────
 
 @app.post("/api/ask")
 def ask(body: AskRequest):
@@ -113,10 +202,12 @@ def ask(body: AskRequest):
                 "sources": result.get("sources", []),
             }
         except Exception:
-            pass  # fall through
+            log.exception("RAG graph failed, falling back to direct answer")
 
     return idx.answer(body.question, body.doc_id)
 
+
+# ── Quiz endpoints ───────────────────────────────────────────────────
 
 @app.post("/api/quiz", status_code=201)
 def create_quiz(body: QuizRequest | None = None):
@@ -150,13 +241,13 @@ def create_quiz(body: QuizRequest | None = None):
     except ImportError:
         quiz = assessment.build_quiz(profile, num_questions)
 
-    quizzes[quiz["id"]] = quiz
+    storage.save_quiz(quiz)
     return assessment.public_view(quiz)
 
 
 @app.post("/api/quiz/{quiz_id}/submit")
 def submit_quiz(quiz_id: str, body: SubmitRequest):
-    quiz = quizzes.get(quiz_id)
+    quiz = storage.load_quiz(quiz_id)
     if not quiz:
         raise HTTPException(404, "Quiz not found.")
 
@@ -167,9 +258,11 @@ def submit_quiz(quiz_id: str, body: SubmitRequest):
     except ImportError:
         score_result = assessment.score_quiz(quiz, body.answers)
 
-    quiz["result"] = score_result
+    storage.save_quiz_result(quiz_id, score_result)
     return score_result
 
+
+# ── Roadmap endpoints ────────────────────────────────────────────────
 
 @app.get("/api/roles")
 def roles():
@@ -183,12 +276,13 @@ def create_roadmap(body: RoadmapRequest):
 
     gaps: list[str] = []
     if body.quiz_id:
-        quiz = quizzes.get(body.quiz_id)
+        quiz = storage.load_quiz(body.quiz_id)
         if not quiz:
             raise HTTPException(404, "Quiz not found.")
-        if "result" not in quiz:
+        result = quiz.get("result")
+        if not result:
             raise HTTPException(400, "Submit the assessment before building a roadmap from it.")
-        gaps = quiz["result"]["gaps"]
+        gaps = result["gaps"]
 
     try:
         from .graph import _build_roadmap
@@ -203,17 +297,24 @@ def create_roadmap(body: RoadmapRequest):
         return roadmap.build_roadmap(body.role, body.weeks, body.hours_per_week, gaps)
 
 
+# ── Health & info ────────────────────────────────────────────────────
+
 @app.get("/api/health")
 def health():
     idx = get_index()
     return {
         "status": "ok",
+        "version": "3.0.0",
         "chunks": len(idx.chunks),
         "documents": len(idx.documents),
         "embeddings": settings.EMBEDDING_MODEL,
         "llm_enabled": settings.llm_enabled,
+        "persistence": "sqlite",
+        "retrieval": "hybrid (dense + BM25 + RRF)",
     }
 
+
+# ── Static files ─────────────────────────────────────────────────────
 
 @app.get("/")
 def home():

@@ -44,11 +44,11 @@ def _rag_retrieve(state: RAGState) -> dict:
     from .rag import get_index
 
     idx = get_index()
-    hits = [
-        h
-        for h in idx.search(state["question"], k=settings.RETRIEVAL_K, doc_id=state.get("doc_id"))
-        if h["score"] > settings.SCORE_THRESHOLD
-    ]
+    raw_hits = idx.search(state["question"], k=settings.RETRIEVAL_K, doc_id=state.get("doc_id"))
+    threshold = settings.SCORE_THRESHOLD
+    if raw_hits and raw_hits[0]["score"] < 0.1:
+        threshold = min(threshold, 0.005)
+    hits = [h for h in raw_hits if h["score"] > threshold]
     sources = [
         {"doc": h["doc_name"], "page": h["page"], "score": h["score"], "excerpt": h["text"][:240]}
         for h in hits

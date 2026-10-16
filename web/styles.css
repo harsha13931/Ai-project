@@ -201,6 +201,12 @@ a:hover { color: var(--brand-strong); }
 
 /* Quiz */
 #assess-intro { display: grid; gap: 0.6rem; justify-items: start; margin-bottom: 1.5rem; }
+.btn-delete {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--danger); cursor: pointer; font-size: 1rem; line-height: 1;
+  padding: 0.15rem 0.5rem; transition: background 0.15s;
+}
+.btn-delete:hover { background: var(--danger); color: white; }
 .quiz-options { display: flex; gap: 1rem; align-items: end; }
 .quiz-options label { display: grid; gap: 0.3rem; font-weight: 600; font-size: 0.95rem; }
 .quiz-options input {

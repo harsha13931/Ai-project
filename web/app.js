@@ -50,9 +50,19 @@
     for (const doc of docs) {
       const tags = [el("span", { className: "tag", text: `${doc.pages} page${doc.pages === 1 ? "" : "s"}` })];
       if (doc.is_resume) tags.push(el("span", { className: "tag resume", text: "Resume detected" }));
+      const deleteBtn = el("button", { className: "btn-delete", "aria-label": `Delete ${doc.name}`, text: "×" });
+      deleteBtn.addEventListener("click", async () => {
+        if (!confirm(`Delete ${doc.name}?`)) return;
+        try {
+          await api(`/api/documents/${doc.id}`, { method: "DELETE" });
+          await refreshDocuments();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
       list.append(el("li", {}, [
         el("div", {}, [el("div", { className: "name", text: doc.name })]),
-        el("div", { className: "tags" }, tags),
+        el("div", { className: "tags" }, [...tags, deleteBtn]),
       ]));
     }
     updateAssessmentHint(docs);

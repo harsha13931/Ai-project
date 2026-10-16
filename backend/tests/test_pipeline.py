@@ -39,9 +39,15 @@ The process happens in chloroplasts and releases oxygen as a byproduct.
 
 
 @pytest.fixture(autouse=True)
-def fresh_index():
+def fresh_index(tmp_path):
+    settings.DATA_DIR = tmp_path
+    settings.DB_PATH = tmp_path / "test.db"
+    from app import storage
+    storage._db = None
+    storage.get_db()
     reset_index()
     yield
+    storage.close_db()
 
 
 def test_chunking_keeps_page_numbers():
@@ -164,11 +170,16 @@ def test_end_to_end_api_flow():
     client = TestClient(app)
     health = client.get("/api/health").json()
     assert health["status"] == "ok"
-    assert "embeddings" in health
+    assert health["persistence"] == "sqlite"
+    assert health["retrieval"] == "hybrid (dense + BM25 + RRF)"
 
     upload = client.post("/api/documents", files={"file": ("cv.txt", RESUME.encode(), "text/plain")})
     assert upload.status_code == 201
     assert upload.json()["is_resume"] is True
+    doc_id = upload.json()["id"]
+
+    docs = client.get("/api/documents").json()
+    assert any(d["id"] == doc_id for d in docs)
 
     quiz = client.post("/api/quiz", json={"num_questions": 5}).json()
     assert quiz["total"] == len(quiz["questions"])
@@ -181,6 +192,10 @@ def test_end_to_end_api_flow():
 
     assert client.post("/api/roadmap", json={"role": "astronaut"}).status_code == 404
     assert client.post("/api/ask", json={"question": "what is in this file?"}).status_code == 200
+
+    delete = client.delete(f"/api/documents/{doc_id}")
+    assert delete.status_code == 200 and delete.json()["deleted"] is True
+    assert client.delete(f"/api/documents/{doc_id}").status_code == 404
 
 
 def test_quiz_requires_resume():
