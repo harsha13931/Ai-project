@@ -309,6 +309,8 @@ def health():
         "documents": len(idx.documents),
         "embeddings": settings.EMBEDDING_MODEL,
         "llm_enabled": settings.llm_enabled,
+        "llm_provider": settings.LLM_PROVIDER or "none",
+        "llm_model": settings.LLM_MODEL or "none",
         "persistence": "sqlite",
         "retrieval": "hybrid (dense + BM25 + RRF)",
     }

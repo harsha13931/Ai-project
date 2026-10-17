@@ -217,6 +217,10 @@ def test_upload_rejects_unsupported_type():
 
 def test_config_centralised():
     """Verify that settings is the single source of truth."""
+    assert hasattr(settings, "LLM_PROVIDER")
+    assert hasattr(settings, "LLM_MODEL")
     assert hasattr(settings, "ANTHROPIC_API_KEY")
+    assert hasattr(settings, "OPENAI_API_KEY")
+    assert hasattr(settings, "GOOGLE_API_KEY")
     assert hasattr(settings, "EMBEDDING_MODEL")
     assert hasattr(settings, "llm_enabled")
