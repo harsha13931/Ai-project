@@ -299,6 +299,95 @@ def create_roadmap(body: RoadmapRequest):
 
 # ── Health & info ────────────────────────────────────────────────────
 
+@app.get("/api/pipeline-graph")
+def pipeline_graph():
+    """Return the LangGraph pipeline topology for visualization."""
+    return {
+        "graphs": [
+            {
+                "id": "rag",
+                "label": "RAG Answering",
+                "description": "Retrieves relevant chunks and generates an answer",
+                "nodes": [
+                    {"id": "question", "label": "Question", "type": "input"},
+                    {"id": "retrieve", "label": "Hybrid Retrieve", "type": "process",
+                     "detail": "Dense (FAISS) + BM25 lexical search, fused with Reciprocal Rank Fusion"},
+                    {"id": "has_hits", "label": "Has Hits?", "type": "condition"},
+                    {"id": "answer", "label": "LLM Answer", "type": "process",
+                     "detail": "LangChain LLM generates answer from retrieved context with citations"},
+                    {"id": "no_hits", "label": "No Results", "type": "fallback",
+                     "detail": "Returns a polite decline when no relevant chunks found"},
+                    {"id": "end_rag", "label": "Response", "type": "output"},
+                ],
+                "edges": [
+                    {"from": "question", "to": "retrieve"},
+                    {"from": "retrieve", "to": "has_hits"},
+                    {"from": "has_hits", "to": "answer", "label": "yes"},
+                    {"from": "has_hits", "to": "no_hits", "label": "no"},
+                    {"from": "answer", "to": "end_rag"},
+                    {"from": "no_hits", "to": "end_rag"},
+                ],
+            },
+            {
+                "id": "doc",
+                "label": "Document Processing",
+                "description": "Ingests a file, detects resumes, and enriches profiles",
+                "nodes": [
+                    {"id": "upload", "label": "File Upload", "type": "input"},
+                    {"id": "ingest", "label": "Ingest & Chunk", "type": "process",
+                     "detail": "Extract text, split into overlapping chunks, embed with HuggingFace, index in FAISS + BM25"},
+                    {"id": "is_resume", "label": "Is Resume?", "type": "condition"},
+                    {"id": "enhance", "label": "LLM Enrich", "type": "process",
+                     "detail": "LLM analyses resume for skills, topics, summary"},
+                    {"id": "persist", "label": "SQLite Persist", "type": "output",
+                     "detail": "Document and profile saved to SQLite for server restart survival"},
+                ],
+                "edges": [
+                    {"from": "upload", "to": "ingest"},
+                    {"from": "ingest", "to": "is_resume"},
+                    {"from": "is_resume", "to": "enhance", "label": "yes"},
+                    {"from": "is_resume", "to": "persist", "label": "no"},
+                    {"from": "enhance", "to": "persist"},
+                ],
+            },
+            {
+                "id": "coach",
+                "label": "Career Coaching",
+                "description": "Quiz generation, scoring, and roadmap planning",
+                "nodes": [
+                    {"id": "resume", "label": "Resume Profile", "type": "input"},
+                    {"id": "quiz_gen", "label": "Generate Quiz", "type": "process",
+                     "detail": "LLM creates questions from resume text; static bank as fallback"},
+                    {"id": "score", "label": "Score & Analyse", "type": "process",
+                     "detail": "Checks answers, flags claimed-but-unverified skills, finds gaps"},
+                    {"id": "guidance", "label": "LLM Guidance", "type": "process",
+                     "detail": "Personalised study advice from the LLM based on score results"},
+                    {"id": "roadmap_gen", "label": "Build Roadmap", "type": "process",
+                     "detail": "Week-by-week plan prioritising gaps, with milestones"},
+                    {"id": "plan", "label": "Learning Plan", "type": "output"},
+                ],
+                "edges": [
+                    {"from": "resume", "to": "quiz_gen"},
+                    {"from": "quiz_gen", "to": "score"},
+                    {"from": "score", "to": "guidance"},
+                    {"from": "guidance", "to": "roadmap_gen"},
+                    {"from": "roadmap_gen", "to": "plan"},
+                ],
+            },
+        ],
+        "meta": {
+            "framework": "LangGraph StateGraph",
+            "embeddings": settings.EMBEDDING_MODEL,
+            "vector_store": "FAISS",
+            "lexical": "BM25 (Okapi)",
+            "fusion": "Reciprocal Rank Fusion",
+            "persistence": "SQLite",
+            "llm_provider": settings.LLM_PROVIDER or "none",
+            "llm_model": settings.LLM_MODEL or "none",
+        },
+    }
+
+
 @app.get("/api/health")
 def health():
     idx = get_index()

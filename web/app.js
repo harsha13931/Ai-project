@@ -326,11 +326,253 @@
     $("roadmap-out").hidden = false;
   }
 
+  /* ---------- Pipeline Graph ---------- */
+
+  const NODE_COLORS = {
+    input: "#4f46e5",
+    process: "#7c3aed",
+    condition: "#b45309",
+    fallback: "#b91c1c",
+    output: "#15803d",
+  };
+
+  let graphTooltip = null;
+
+  function ensureTooltip() {
+    if (graphTooltip) return graphTooltip;
+    graphTooltip = document.createElement("div");
+    graphTooltip.className = "graph-tooltip";
+    document.body.appendChild(graphTooltip);
+    return graphTooltip;
+  }
+
+  function layoutGraph(graph) {
+    const nodes = graph.nodes;
+    const nodeMap = {};
+    nodes.forEach((n, i) => { nodeMap[n.id] = i; });
+
+    const cols = [];
+    const placed = new Set();
+    const edges = graph.edges;
+
+    // topological layers
+    const incoming = {};
+    nodes.forEach((n) => { incoming[n.id] = 0; });
+    edges.forEach((e) => { incoming[e.to] = (incoming[e.to] || 0) + 1; });
+
+    let queue = nodes.filter((n) => incoming[n.id] === 0).map((n) => n.id);
+    while (queue.length) {
+      cols.push([...queue]);
+      queue.forEach((id) => placed.add(id));
+      const next = [];
+      for (const id of queue) {
+        for (const e of edges) {
+          if (e.from === id && !placed.has(e.to)) {
+            incoming[e.to]--;
+            if (incoming[e.to] <= 0 && !next.includes(e.to)) next.push(e.to);
+          }
+        }
+      }
+      queue = next;
+    }
+    // catch any remaining
+    nodes.forEach((n) => { if (!placed.has(n.id)) cols[cols.length - 1].push(n.id); });
+
+    const nodeW = 150, nodeH = 48, colGap = 80, rowGap = 28;
+    const totalW = cols.length * (nodeW + colGap) - colGap;
+    const maxRows = Math.max(...cols.map((c) => c.length));
+    const totalH = maxRows * (nodeH + rowGap) - rowGap;
+    const padX = 40, padY = 40;
+    const positions = {};
+
+    cols.forEach((col, ci) => {
+      const x = padX + ci * (nodeW + colGap);
+      const colH = col.length * (nodeH + rowGap) - rowGap;
+      const offsetY = padY + (totalH - colH) / 2;
+      col.forEach((id, ri) => {
+        positions[id] = { x, y: offsetY + ri * (nodeH + rowGap), w: nodeW, h: nodeH };
+      });
+    });
+
+    return { positions, width: totalW + padX * 2, height: totalH + padY * 2 };
+  }
+
+  function renderGraphSVG(graph) {
+    const { positions, width, height } = layoutGraph(graph);
+    const svg = $("graph-svg");
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.innerHTML = "";
+
+    const ns = "http://www.w3.org/2000/svg";
+
+    // marker for arrowheads
+    const defs = document.createElementNS(ns, "defs");
+    const marker = document.createElementNS(ns, "marker");
+    marker.setAttribute("id", "arrow");
+    marker.setAttribute("viewBox", "0 0 10 10");
+    marker.setAttribute("refX", "10");
+    marker.setAttribute("refY", "5");
+    marker.setAttribute("markerWidth", "8");
+    marker.setAttribute("markerHeight", "8");
+    marker.setAttribute("orient", "auto-start-reverse");
+    const arrowPath = document.createElementNS(ns, "path");
+    arrowPath.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+    arrowPath.setAttribute("fill", "var(--muted)");
+    marker.appendChild(arrowPath);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    // edges
+    for (const edge of graph.edges) {
+      const from = positions[edge.from];
+      const to = positions[edge.to];
+      if (!from || !to) continue;
+
+      const x1 = from.x + from.w;
+      const y1 = from.y + from.h / 2;
+      const x2 = to.x;
+      const y2 = to.y + to.h / 2;
+
+      const midX = (x1 + x2) / 2;
+      const path = document.createElementNS(ns, "path");
+      path.setAttribute("d", `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "var(--border)");
+      path.setAttribute("stroke-width", "2");
+      path.setAttribute("marker-end", "url(#arrow)");
+      svg.appendChild(path);
+
+      if (edge.label) {
+        const lx = midX;
+        const ly = (y1 + y2) / 2 - 6;
+        const text = document.createElementNS(ns, "text");
+        text.setAttribute("x", String(lx));
+        text.setAttribute("y", String(ly));
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("fill", "var(--muted)");
+        text.setAttribute("font-size", "11");
+        text.setAttribute("font-weight", "600");
+        text.textContent = edge.label;
+        svg.appendChild(text);
+      }
+    }
+
+    // nodes
+    for (const node of graph.nodes) {
+      const pos = positions[node.id];
+      const color = NODE_COLORS[node.type] || NODE_COLORS.process;
+      const g = document.createElementNS(ns, "g");
+      g.setAttribute("class", "graph-node");
+      g.style.cursor = node.detail ? "pointer" : "default";
+
+      const isCondition = node.type === "condition";
+      if (isCondition) {
+        const diamond = document.createElementNS(ns, "polygon");
+        const cx = pos.x + pos.w / 2, cy = pos.y + pos.h / 2;
+        const rx = pos.w / 2, ry = pos.h / 2;
+        diamond.setAttribute("points", `${cx},${cy - ry} ${cx + rx},${cy} ${cx},${cy + ry} ${cx - rx},${cy}`);
+        diamond.setAttribute("fill", color);
+        diamond.setAttribute("opacity", "0.12");
+        diamond.setAttribute("stroke", color);
+        diamond.setAttribute("stroke-width", "2");
+        g.appendChild(diamond);
+      } else {
+        const rect = document.createElementNS(ns, "rect");
+        rect.setAttribute("x", String(pos.x));
+        rect.setAttribute("y", String(pos.y));
+        rect.setAttribute("width", String(pos.w));
+        rect.setAttribute("height", String(pos.h));
+        rect.setAttribute("rx", node.type === "input" || node.type === "output" ? "24" : "10");
+        rect.setAttribute("fill", color);
+        rect.setAttribute("opacity", "0.12");
+        rect.setAttribute("stroke", color);
+        rect.setAttribute("stroke-width", "2");
+        g.appendChild(rect);
+      }
+
+      const text = document.createElementNS(ns, "text");
+      text.setAttribute("x", String(pos.x + pos.w / 2));
+      text.setAttribute("y", String(pos.y + pos.h / 2 + 5));
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("fill", "var(--text)");
+      text.setAttribute("font-size", "13");
+      text.setAttribute("font-weight", "600");
+      text.textContent = node.label;
+      g.appendChild(text);
+
+      if (node.detail) {
+        g.addEventListener("mouseenter", (evt) => {
+          const tt = ensureTooltip();
+          tt.innerHTML = `<div class="tt-label">${node.label}</div><div class="tt-detail">${node.detail}</div>`;
+          tt.classList.add("visible");
+          const r = evt.target.closest("g").getBoundingClientRect();
+          tt.style.left = `${r.left + r.width / 2 - 140}px`;
+          tt.style.top = `${r.bottom + 8}px`;
+        });
+        g.addEventListener("mouseleave", () => {
+          ensureTooltip().classList.remove("visible");
+        });
+      }
+
+      svg.appendChild(g);
+    }
+  }
+
+  function renderGraphMeta(meta) {
+    const box = $("graph-meta");
+    box.replaceChildren();
+    const items = [
+      { color: NODE_COLORS.input, text: "Input" },
+      { color: NODE_COLORS.process, text: "Process" },
+      { color: NODE_COLORS.condition, text: "Condition" },
+      { color: NODE_COLORS.fallback, text: "Fallback" },
+      { color: NODE_COLORS.output, text: "Output" },
+    ];
+    for (const item of items) {
+      const dot = el("span", { className: "dot", style: `background:${item.color}` });
+      box.append(el("span", {}, [dot, document.createTextNode(` ${item.text}`)]));
+    }
+    box.append(el("span", { text: `Framework: ${meta.framework}` }));
+    box.append(el("span", { text: `Embeddings: ${meta.embeddings}` }));
+    box.append(el("span", { text: `Vector: ${meta.vector_store} + ${meta.lexical}` }));
+    if (meta.llm_provider !== "none") {
+      box.append(el("span", { text: `LLM: ${meta.llm_provider} / ${meta.llm_model}` }));
+    }
+  }
+
+  async function loadPipelineGraph() {
+    try {
+      const data = await api("/api/pipeline-graph");
+      const tabBar = $("graph-tabs");
+      tabBar.replaceChildren();
+
+      data.graphs.forEach((graph, index) => {
+        const btn = el("button", {
+          className: "graph-tab",
+          role: "tab",
+          "aria-selected": index === 0 ? "true" : "false",
+          text: graph.label,
+        });
+        btn.addEventListener("click", () => {
+          tabBar.querySelectorAll(".graph-tab").forEach((t) => t.setAttribute("aria-selected", "false"));
+          btn.setAttribute("aria-selected", "true");
+          renderGraphSVG(graph);
+        });
+        tabBar.append(btn);
+      });
+
+      if (data.graphs.length) renderGraphSVG(data.graphs[0]);
+      renderGraphMeta(data.meta);
+    } catch (err) {
+      $("graph-viewport").textContent = "Could not load pipeline graph.";
+    }
+  }
+
   /* ---------- Boot ---------- */
 
   (async () => {
     try {
-      await Promise.all([refreshDocuments(), loadRoles()]);
+      await Promise.all([refreshDocuments(), loadRoles(), loadPipelineGraph()]);
     } catch (err) {
       setStatus($("upload-status"), "Could not reach the server. Is the API running?", "error");
     }

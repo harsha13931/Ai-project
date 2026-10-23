@@ -282,6 +282,38 @@ a:hover { color: var(--brand-strong); }
 .timetable tr.milestone td { background: var(--brand-soft); }
 .timetable td:first-child { font-weight: 700; width: 4.5rem; }
 
+/* Pipeline Graph */
+.graph-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.graph-tab {
+  padding: 0.55rem 1.1rem; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-weight: 600;
+  font-size: 0.95rem; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+.graph-tab:hover { border-color: var(--brand); }
+.graph-tab[aria-selected="true"] { background: var(--brand); color: #fff; border-color: var(--brand); }
+.graph-viewport {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); overflow-x: auto; padding: 1.5rem; min-height: 320px;
+  display: flex; align-items: center; justify-content: center;
+}
+#graph-svg { width: 100%; height: auto; }
+.graph-meta {
+  margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem;
+  font-size: 0.9rem; color: var(--muted);
+}
+.graph-meta span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.graph-meta .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+.graph-tooltip {
+  position: fixed; z-index: 100; max-width: 280px; padding: 0.6rem 0.9rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow); font-size: 0.88rem; color: var(--text);
+  pointer-events: none; opacity: 0; transition: opacity 0.15s;
+}
+.graph-tooltip.visible { opacity: 1; }
+.graph-tooltip .tt-label { font-weight: 650; margin-bottom: 0.2rem; }
+.graph-tooltip .tt-detail { color: var(--muted); }
+
 /* FAQ */
 details { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 0.75rem; }
 summary { cursor: pointer; font-weight: 650; }

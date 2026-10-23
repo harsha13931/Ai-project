@@ -215,6 +215,22 @@ def test_upload_rejects_unsupported_type():
     assert res.status_code == 422
 
 
+def test_pipeline_graph_endpoint():
+    client = TestClient(app)
+    res = client.get("/api/pipeline-graph")
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["graphs"]) == 3
+    ids = {g["id"] for g in data["graphs"]}
+    assert ids == {"rag", "doc", "coach"}
+    for g in data["graphs"]:
+        assert len(g["nodes"]) >= 4
+        assert len(g["edges"]) >= 3
+        assert all("id" in n and "label" in n for n in g["nodes"])
+    assert data["meta"]["framework"] == "LangGraph StateGraph"
+    assert data["meta"]["vector_store"] == "FAISS"
+
+
 def test_config_centralised():
     """Verify that settings is the single source of truth."""
     assert hasattr(settings, "LLM_PROVIDER")
